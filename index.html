@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#123338">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kostenkreis">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='46' fill='%2305070a'/%3E%3Ccircle cx='50' cy='50' r='36' fill='none' stroke='%23ff9f1c' stroke-width='10'/%3E%3C/svg%3E">
+<title>Kostenkreis — Meeting-Kosten</title>
+<style>
+  :root{
+    --board:#123338;
+    --board-edge:#0b2528;
+    --board-highlight:#1c4a4f;
+    --screw:#c3cbc6;
+    --screw-hole:#262c2a;
+    --display-bg:#05070a;
+    --display-edge:#000;
+    --accent:#ff9f1c;
+    --accent-dim:#7a4e12;
+    --accent-glow:rgba(255,159,28,.35);
+    --danger:#ff6459;
+    --track:#20262c;
+    --text:#f2f3f5;
+    --text-dim:#8a93a0;
+    --panel:#1b2126;
+    --panel-2:#232a30;
+    --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:"SFMono-Regular",ui-monospace,"DejaVu Sans Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    min-height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:radial-gradient(ellipse at 50% -10%, #1a1f24 0%, #0a0c0e 55%, #060708 100%);
+    font-family:var(--font-sans);
+    color:var(--text);
+    padding:28px 16px;
+  }
+
+  .stage{
+    width:100%;
+    max-width:400px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:18px;
+  }
+
+  /* ---- the device / board ---- */
+  .board{
+    position:relative;
+    width:100%;
+    background:linear-gradient(160deg,var(--board-highlight),var(--board) 55%);
+    border-radius:26px;
+    padding:26px 18px 30px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,.06) inset,
+      0 30px 60px -20px rgba(0,0,0,.7),
+      0 0 0 1px var(--board-edge);
+  }
+  .pinrow{
+    display:flex;
+    justify-content:center;
+    gap:14px;
+    margin-bottom:20px;
+    opacity:.55;
+  }
+  .pinrow span{
+    font-family:var(--font-mono);
+    font-size:8px;
+    letter-spacing:.03em;
+    color:#cfe8e6;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+  }
+  .pinrow span::before{
+    content:"";
+    width:6px;height:6px;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #e8e8e8, #8a8f8d 70%);
+    box-shadow:0 0 0 1px rgba(0,0,0,.4);
+  }
+  .screw{
+    position:absolute;
+    width:18px;height:18px;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, var(--screw), #6b706d 75%);
+    box-shadow:0 2px 3px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.3);
+  }
+  .screw::after{
+    content:"";
+    position:absolute;
+    inset:5px;
+    border-radius:50%;
+    background:var(--screw-hole);
+    box-shadow:0 1px 2px rgba(0,0,0,.6) inset;
+  }
+  .screw.tl{top:14px;left:14px;}
+  .screw.tr{top:14px;right:14px;}
+  .screw.bl{bottom:14px;left:14px;}
+  .screw.br{bottom:14px;right:14px;}
+
+  /* ---- setup panel (rounded rect, lives inside the board) ---- */
+  .panel{
+    background:var(--display-bg);
+    border-radius:16px;
+    padding:22px 18px 20px;
+    box-shadow:0 0 0 6px var(--display-edge), 0 20px 40px -20px rgba(0,0,0,.8) inset;
+  }
+  .eyebrow{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:.16em;
+    color:var(--accent);
+    text-transform:uppercase;
+    text-align:center;
+    margin:0 0 2px;
+  }
+  h1{
+    font-size:19px;
+    text-align:center;
+    margin:0 0 18px;
+    font-weight:700;
+    letter-spacing:.01em;
+  }
+  .field-label{
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin:0 0 8px;
+  }
+  .groups{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-bottom:20px;
+  }
+  .group-card{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:var(--panel);
+    border:1.5px solid transparent;
+    border-radius:12px;
+    padding:11px 12px;
+    cursor:pointer;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .group-card.active{
+    border-color:var(--accent);
+    background:var(--panel-2);
+  }
+  .group-card .name{
+    font-size:14px;
+    font-weight:600;
+  }
+  .group-card .name small{
+    display:block;
+    font-weight:400;
+    font-size:10.5px;
+    color:var(--text-dim);
+    margin-top:1px;
+  }
+  .rate-input{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    font-family:var(--font-mono);
+    color:var(--accent);
+    font-size:13px;
+  }
+  .rate-input input{
+    width:52px;
+    background:transparent;
+    border:none;
+    border-bottom:1px solid var(--text-dim);
+    color:var(--accent);
+    font-family:var(--font-mono);
+    font-size:13px;
+    text-align:right;
+    padding:2px 0;
+  }
+  .rate-input input:focus{outline:none; border-bottom-color:var(--accent);}
+
+  .row-block{margin-bottom:20px;}
+  .stepper{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:18px;
+    background:var(--panel);
+    border-radius:12px;
+    padding:10px;
+  }
+  .stepper button{
+    width:34px;height:34px;
+    border-radius:9px;
+    border:none;
+    background:var(--panel-2);
+    color:var(--text);
+    font-size:18px;
+    line-height:1;
+    cursor:pointer;
+  }
+  .stepper button:active{background:var(--accent-dim);}
+  .stepper .count{
+    font-family:var(--font-mono);
+    font-size:20px;
+    min-width:34px;
+    text-align:center;
+  }
+  .stepper .count-label{
+    font-size:11px;
+    color:var(--text-dim);
+    text-transform:uppercase;
+    letter-spacing:.08em;
+  }
+
+  .chips{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:8px;
+  }
+  .chip{
+    background:var(--panel);
+    border:1.5px solid transparent;
+    border-radius:10px;
+    padding:9px 4px;
+    text-align:center;
+    font-family:var(--font-mono);
+    font-size:13px;
+    cursor:pointer;
+  }
+  .chip.active{
+    border-color:var(--accent);
+    color:var(--accent);
+    background:var(--panel-2);
+  }
+
+  .custom-duration{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-top:8px;
+  }
+  .custom-duration input{
+    flex:1;
+    background:var(--panel);
+    border:1.5px solid transparent;
+    border-radius:10px;
+    padding:9px 10px;
+    color:var(--text);
+    font-family:var(--font-mono);
+    font-size:13px;
+  }
+  .custom-duration input:focus{outline:none; border-color:var(--accent);}
+  .custom-duration input.active{border-color:var(--accent); color:var(--accent);}
+  .custom-duration span{
+    font-size:11px;
+    color:var(--text-dim);
+    white-space:nowrap;
+  }
+
+  .preview{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    background:var(--panel);
+    border-radius:12px;
+    padding:11px 14px;
+    margin-bottom:14px;
+  }
+  .preview .preview-label{
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .preview .preview-value{
+    font-family:var(--font-mono);
+    font-size:16px;
+    color:var(--accent);
+    font-weight:700;
+  }
+
+  .history{
+    margin-top:20px;
+  }
+  .history-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:8px;
+  }
+  .history-clear{
+    background:none;
+    border:none;
+    color:var(--text-dim);
+    font-size:10.5px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+  }
+  .history-list{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    max-height:150px;
+    overflow-y:auto;
+  }
+  .history-item{
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+    background:var(--panel);
+    border-radius:9px;
+    padding:8px 10px;
+    font-size:11.5px;
+  }
+  .history-item .h-main{color:var(--text);}
+  .history-item .h-sub{color:var(--text-dim); font-size:10px; margin-top:1px;}
+  .history-item .h-cost{
+    font-family:var(--font-mono);
+    color:var(--accent);
+    font-weight:700;
+    white-space:nowrap;
+  }
+  .history-empty{
+    font-size:11.5px;
+    color:var(--text-dim);
+    text-align:center;
+    padding:10px 0;
+  }
+
+  .start-btn{
+    width:100%;
+    border:none;
+    border-radius:12px;
+    padding:14px;
+    font-size:14px;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    background:var(--accent);
+    color:#1a1206;
+    cursor:pointer;
+    box-shadow:0 8px 20px -8px var(--accent-glow);
+  }
+  .start-btn:active{transform:translateY(1px);}
+
+  /* ---- circular running display ---- */
+  .dial-wrap{
+    display:flex;
+    justify-content:center;
+  }
+  .dial{
+    position:relative;
+    width:100%;
+    aspect-ratio:1/1;
+    max-width:320px;
+    border-radius:50%;
+    background:var(--display-bg);
+    box-shadow:0 0 0 6px var(--display-edge), 0 0 40px -10px rgba(0,0,0,.9) inset;
+    cursor:pointer;
+    user-select:none;
+  }
+  .dial svg{position:absolute; inset:0; width:100%; height:100%; transform:rotate(-90deg);}
+  .ring-track{fill:none; stroke:var(--track); stroke-width:14;}
+  .ring-progress{
+    fill:none;
+    stroke:var(--accent);
+    stroke-width:14;
+    stroke-linecap:round;
+    transition:stroke-dashoffset .2s linear, stroke .3s ease;
+    filter:drop-shadow(0 0 6px var(--accent-glow));
+  }
+  .ring-progress.over{stroke:var(--danger);}
+
+  .dial-content{
+    position:absolute; inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:0 20px;
+  }
+  .dial-label{
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    margin-bottom:6px;
+  }
+  .dial-cost{
+    font-family:var(--font-mono);
+    font-size:clamp(30px,9.5vw,40px);
+    font-weight:700;
+    color:var(--accent);
+    letter-spacing:.01em;
+    line-height:1;
+  }
+  .dial-time{
+    font-family:var(--font-mono);
+    font-size:20px;
+    color:var(--text);
+    margin-top:10px;
+  }
+  .dial-meta{
+    margin-top:8px;
+    font-size:11.5px;
+    color:var(--text-dim);
+    letter-spacing:.04em;
+  }
+  .dial-progress-label{
+    margin-top:2px;
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    color:var(--accent);
+    letter-spacing:.04em;
+  }
+  .dial-progress-label.over{color:var(--danger);}
+  .dial-permin{
+    margin-top:2px;
+    font-size:10.5px;
+    color:var(--text-dim);
+    letter-spacing:.03em;
+  }
+  @keyframes alertPulse{
+    0%,100%{ box-shadow:0 0 0 6px var(--display-edge), 0 0 40px -10px rgba(0,0,0,.9) inset; }
+    50%{ box-shadow:0 0 0 6px var(--display-edge), 0 0 55px 4px rgba(255,100,89,.55) inset; }
+  }
+  .dial.alert{animation:alertPulse .9s ease-in-out 3;}
+  .dial-hint{
+    position:absolute;
+    bottom:14px; left:0; right:0;
+    text-align:center;
+    font-size:9.5px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    opacity:.6;
+  }
+  .dial.paused .dial-cost,
+  .dial.paused .dial-time{opacity:.45;}
+  .dial.paused .ring-progress{stroke:var(--text-dim); filter:none;}
+
+  .controls{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    width:100%;
+  }
+  .controls button{
+    flex:1;
+    border:none;
+    border-radius:12px;
+    padding:13px;
+    font-size:13px;
+    font-weight:600;
+    letter-spacing:.03em;
+    cursor:pointer;
+  }
+  .btn-secondary{
+    background:var(--panel);
+    color:var(--text);
+  }
+  .btn-danger{
+    background:transparent;
+    color:var(--danger);
+    border:1.5px solid var(--danger) !important;
+  }
+
+  .hidden{display:none !important;}
+
+  @media (prefers-reduced-motion:reduce){
+    .ring-progress{transition:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- ============ BOARD / DEVICE ============ -->
+  <div class="board">
+    <div class="screw tl"></div>
+    <div class="screw tr"></div>
+    <div class="screw bl"></div>
+    <div class="screw br"></div>
+
+    <div class="pinrow">
+      <span>GND</span><span>VCC</span><span>SCL</span><span>SDA</span>
+      <span>RES</span><span>DC</span><span>CS</span><span>BLK</span>
+    </div>
+
+    <!-- ---- SETUP SCREEN ---- -->
+    <div id="setup" class="panel">
+      <p class="eyebrow">Kostenkreis</p>
+      <h1>Meeting-Kosten live berechnen</h1>
+
+      <p class="field-label">Gruppe</p>
+      <div class="groups" id="groups"></div>
+
+      <div class="row-block">
+        <p class="field-label">Teilnehmer</p>
+        <div class="stepper">
+          <button type="button" id="peopleMinus">–</button>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <span class="count" id="peopleCount">6</span>
+            <span class="count-label">Personen</span>
+          </div>
+          <button type="button" id="peoplePlus">+</button>
+        </div>
+      </div>
+
+      <div class="row-block">
+        <p class="field-label">Geplante Dauer</p>
+        <div class="chips" id="durationChips"></div>
+        <div class="custom-duration">
+          <input type="number" min="1" max="480" step="5" id="customDuration" placeholder="eigene Minuten">
+          <span>Min. (bis 480)</span>
+        </div>
+      </div>
+
+      <div class="preview">
+        <span class="preview-label">Voraussichtl. Kosten</span>
+        <span class="preview-value" id="previewCost">€0</span>
+      </div>
+
+      <button type="button" class="start-btn" id="startBtn">Meeting starten</button>
+
+      <div class="history">
+        <div class="history-header">
+          <p class="field-label" style="margin:0;">Verlauf</p>
+          <button type="button" class="history-clear" id="historyClear">Löschen</button>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </div>
+    </div>
+
+    <!-- ---- RUNNING SCREEN ---- -->
+    <div id="running" class="hidden">
+      <div class="dial-wrap">
+        <div class="dial" id="dial">
+          <svg viewBox="0 0 280 280">
+            <circle class="ring-track" cx="140" cy="140" r="120"></circle>
+            <circle class="ring-progress" id="ringProgress" cx="140" cy="140" r="120"></circle>
+          </svg>
+          <div class="dial-content">
+            <div class="dial-label">Meeting-Kosten</div>
+            <div class="dial-cost" id="costValue">€0</div>
+            <div class="dial-time" id="timeValue">00:00</div>
+            <div class="dial-meta" id="peopleMeta">6 Personen</div>
+            <div class="dial-progress-label" id="progressLabel">0 % des Meetings</div>
+            <div class="dial-permin" id="perMinValue">≈ €0 / Min</div>
+          </div>
+          <div class="dial-hint" id="dialHint">Tippen zum Stoppen</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- controls live outside the board, only shown while running -->
+  <div class="controls hidden" id="controls">
+    <button type="button" class="btn-secondary" id="copyBtn">Zusammenfassung kopieren</button>
+    <button type="button" class="btn-secondary" id="resetBtn">Neues Meeting</button>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var GROUPS = [
+    {id:"management", name:"Management", rate:70},
+    {id:"ingenieure", name:"Ingenieure", rate:50},
+    {id:"innendienst", name:"Innendienst", rate:40}
+  ];
+  var DURATIONS = [15,30,45,60,90,120]; // minutes, up to 2h
+
+  var state = {
+    group: "management",
+    people: 6,
+    durationMin: 60,
+    running: false,
+    startedAt: null,
+    accumulatedMs: 0,
+    rafId: null
+  };
+
+  // ---------- persistence: remember rates / people / duration between meetings ----------
+  var STORAGE_KEY = "kostenkreis-settings-v1";
+  var HISTORY_KEY = "kostenkreis-history-v1";
+  var HISTORY_MAX = 8;
+  var history = [];
+
+  function loadHistory(){
+    try{
+      var raw = localStorage.getItem(HISTORY_KEY);
+      history = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(history)) history = [];
+    } catch(e){ history = []; }
+  }
+
+  function saveHistory(){
+    try{ localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_MAX))); }
+    catch(e){ /* ignore */ }
+  }
+
+  function addHistoryEntry(entry){
+    history.unshift(entry);
+    history = history.slice(0, HISTORY_MAX);
+    saveHistory();
+    renderHistory();
+  }
+
+  function loadSettings(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      if (saved.rates){
+        GROUPS.forEach(function(g){
+          if (typeof saved.rates[g.id] === "number" && saved.rates[g.id] >= 0){
+            g.rate = saved.rates[g.id];
+          }
+        });
+      }
+      if (typeof saved.people === "number" && saved.people >= 1){
+        state.people = saved.people;
+      }
+      if (typeof saved.durationMin === "number" && DURATIONS.indexOf(saved.durationMin) !== -1){
+        state.durationMin = saved.durationMin;
+      }
+      if (typeof saved.group === "string" && GROUPS.some(function(g){ return g.id === saved.group; })){
+        state.group = saved.group;
+      }
+    } catch(e){ /* ignore corrupt/unavailable storage */ }
+  }
+
+  function saveSettings(){
+    try{
+      var rates = {};
+      GROUPS.forEach(function(g){ rates[g.id] = g.rate; });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        rates: rates,
+        people: state.people,
+        durationMin: state.durationMin,
+        group: state.group
+      }));
+    } catch(e){ /* storage unavailable — app still works, just won't persist */ }
+  }
+
+  loadSettings();
+  loadHistory();
+
+  // ---------- setup screen ----------
+  var groupsEl = document.getElementById("groups");
+  GROUPS.forEach(function(g){
+    var card = document.createElement("div");
+    card.className = "group-card" + (g.id === state.group ? " active" : "");
+    card.dataset.id = g.id;
+    card.innerHTML =
+      '<div class="name">' + g.name + '<small>Standard-Kostensatz pro Person</small></div>' +
+      '<div class="rate-input"><input type="number" min="0" step="5" value="' + g.rate + '" data-rate="' + g.id + '">&nbsp;€/h</div>';
+    card.addEventListener("click", function(e){
+      if (e.target.tagName === "INPUT") return;
+      state.group = g.id;
+      updateGroupSelection();
+      saveSettings();
+      updatePreview();
+    });
+    groupsEl.appendChild(card);
+  });
+
+  groupsEl.querySelectorAll('input[data-rate]').forEach(function(inp){
+    inp.addEventListener("click", function(e){ e.stopPropagation(); });
+    inp.addEventListener("change", function(){
+      var g = GROUPS.find(function(x){ return x.id === inp.dataset.rate; });
+      var v = parseFloat(inp.value);
+      g.rate = isNaN(v) || v < 0 ? g.rate : v;
+      inp.value = g.rate;
+      saveSettings();
+      updatePreview();
+    });
+  });
+
+  function updateGroupSelection(){
+    groupsEl.querySelectorAll(".group-card").forEach(function(c){
+      c.classList.toggle("active", c.dataset.id === state.group);
+    });
+  }
+
+  var peopleCountEl = document.getElementById("peopleCount");
+  peopleCountEl.textContent = state.people;
+  document.getElementById("peopleMinus").addEventListener("click", function(){
+    state.people = Math.max(1, state.people - 1);
+    peopleCountEl.textContent = state.people;
+    saveSettings();
+    updatePreview();
+  });
+  document.getElementById("peoplePlus").addEventListener("click", function(){
+    state.people = Math.min(200, state.people + 1);
+    peopleCountEl.textContent = state.people;
+    saveSettings();
+    updatePreview();
+  });
+
+  var chipsEl = document.getElementById("durationChips");
+  var chipEls = [];
+  DURATIONS.forEach(function(min){
+    var chip = document.createElement("div");
+    chip.className = "chip" + (min === state.durationMin ? " active" : "");
+    chip.textContent = min < 60 ? (min + " min") : (min === 60 ? "1 h" : (min/60) + " h" + (min % 60 ? " " + (min%60) + "m" : ""));
+    chip.addEventListener("click", function(){
+      state.durationMin = min;
+      chipEls.forEach(function(c){ c.classList.remove("active"); });
+      chip.classList.add("active");
+      customDurationEl.value = "";
+      customDurationEl.classList.remove("active");
+      saveSettings();
+      updatePreview();
+    });
+    chipEls.push(chip);
+    chipsEl.appendChild(chip);
+  });
+
+  var customDurationEl = document.getElementById("customDuration");
+  if (DURATIONS.indexOf(state.durationMin) === -1){
+    customDurationEl.value = state.durationMin;
+    customDurationEl.classList.add("active");
+  }
+  customDurationEl.addEventListener("change", function(){
+    var v = parseInt(customDurationEl.value, 10);
+    if (isNaN(v) || v < 1){ customDurationEl.classList.remove("active"); return; }
+    v = Math.min(480, v);
+    customDurationEl.value = v;
+    state.durationMin = v;
+    chipEls.forEach(function(c){ c.classList.remove("active"); });
+    customDurationEl.classList.add("active");
+    saveSettings();
+    updatePreview();
+  });
+
+  var previewCostEl = document.getElementById("previewCost");
+  function updatePreview(){
+    var group = GROUPS.find(function(g){ return g.id === state.group; });
+    var hours = state.durationMin / 60;
+    var cost = group.rate * state.people * hours;
+    previewCostEl.textContent = fmtCost(cost);
+  }
+
+  // ---------- history list ----------
+  var historyListEl = document.getElementById("historyList");
+  function renderHistory(){
+    historyListEl.innerHTML = "";
+    if (!history.length){
+      historyListEl.innerHTML = '<div class="history-empty">Noch keine Meetings gespeichert</div>';
+      return;
+    }
+    history.forEach(function(h){
+      var item = document.createElement("div");
+      item.className = "history-item";
+      item.innerHTML =
+        '<div><div class="h-main">' + h.groupName + ' · ' + h.people + ' Pers.</div>' +
+        '<div class="h-sub">' + h.date + ' · ' + h.duration + '</div></div>' +
+        '<div class="h-cost">' + h.cost + '</div>';
+      historyListEl.appendChild(item);
+    });
+  }
+  document.getElementById("historyClear").addEventListener("click", function(){
+    history = [];
+    saveHistory();
+    renderHistory();
+  });
+  renderHistory();
+
+  // ---------- transition to running ----------
+  var setupEl = document.getElementById("setup");
+  var runningEl = document.getElementById("running");
+  var controlsEl = document.getElementById("controls");
+  var dialEl = document.getElementById("dial");
+  var ringEl = document.getElementById("ringProgress");
+  var costEl = document.getElementById("costValue");
+  var timeEl = document.getElementById("timeValue");
+  var peopleMetaEl = document.getElementById("peopleMeta");
+  var progressLabelEl = document.getElementById("progressLabel");
+  var perMinEl = document.getElementById("perMinValue");
+  var dialHintEl = document.getElementById("dialHint");
+
+  function playAlertSound(){
+    try{
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      var ctx = new Ctx();
+      [0, 0.18, 0.36].forEach(function(delay){
+        var osc = ctx.createOscillator();
+        var gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 880;
+        gain.gain.value = 0.001;
+        osc.connect(gain).connect(ctx.destination);
+        var t = ctx.currentTime + delay;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.14);
+        osc.start(t);
+        osc.stop(t + 0.15);
+      });
+    } catch(e){ /* audio unavailable */ }
+  }
+
+  function triggerOvertimeAlert(){
+    if (state.overtimeAlerted) return;
+    state.overtimeAlerted = true;
+    playAlertSound();
+    if (navigator.vibrate) navigator.vibrate([120, 60, 120, 60, 200]);
+    dialEl.classList.add("alert");
+    setTimeout(function(){ dialEl.classList.remove("alert"); }, 2800);
+  }
+
+  var R = 120, CIRC = 2 * Math.PI * R;
+  ringEl.style.strokeDasharray = CIRC.toFixed(2);
+  ringEl.style.strokeDashoffset = CIRC.toFixed(2);
+
+  document.getElementById("startBtn").addEventListener("click", function(){
+    peopleMetaEl.textContent = state.people + (state.people === 1 ? " Person" : " Personen");
+    state.overtimeAlerted = false;
+    setupEl.classList.add("hidden");
+    runningEl.classList.remove("hidden");
+    controlsEl.classList.remove("hidden");
+    startTimer();
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", function(){
+    var elapsedMs = currentElapsedMs();
+    if (elapsedMs > 1000){
+      var group = GROUPS.find(function(g){ return g.id === state.group; });
+      var cost = group.rate * state.people * (elapsedMs / 3600000);
+      addHistoryEntry({
+        date: new Date().toLocaleDateString("de-DE", {day:"2-digit", month:"2-digit"}) + " " +
+              new Date().toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit"}),
+        groupName: group.name,
+        people: state.people,
+        duration: fmtTime(elapsedMs),
+        cost: fmtCost(cost)
+      });
+    }
+    stopTimer();
+    state.accumulatedMs = 0;
+    state.startedAt = null;
+    state.running = false;
+    state.overtimeAlerted = false;
+    runningEl.classList.add("hidden");
+    controlsEl.classList.add("hidden");
+    dialEl.classList.remove("paused");
+    setupEl.classList.remove("hidden");
+    dialHintEl.textContent = "Tippen zum Stoppen";
+    updatePreview();
+  });
+
+  document.getElementById("copyBtn").addEventListener("click", function(){
+    var elapsedMs = currentElapsedMs();
+    var group = GROUPS.find(function(g){ return g.id === state.group; });
+    var cost = group.rate * state.people * (elapsedMs / 3600000);
+    var text = "Meeting-Kosten (" + group.name + ", " + state.people + " Personen)\n" +
+               "Dauer: " + fmtTime(elapsedMs) + "\n" +
+               "Kosten: " + fmtCost(cost);
+    var done = function(){
+      var original = document.getElementById("copyBtn").textContent;
+      document.getElementById("copyBtn").textContent = "Kopiert ✓";
+      setTimeout(function(){ document.getElementById("copyBtn").textContent = original; }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(done).catch(function(){});
+    } else {
+      var ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try{ document.execCommand("copy"); done(); } catch(e){}
+      document.body.removeChild(ta);
+    }
+  });
+
+  dialEl.addEventListener("click", function(){
+    if (state.running){
+      pauseTimer();
+    } else {
+      resumeTimer();
+    }
+  });
+
+  function startTimer(){
+    state.startedAt = Date.now();
+    state.running = true;
+    dialEl.classList.remove("paused");
+    dialHintEl.textContent = "Tippen zum Stoppen";
+    tick();
+  }
+  function pauseTimer(){
+    state.running = false;
+    state.accumulatedMs += Date.now() - state.startedAt;
+    dialEl.classList.add("paused");
+    dialHintEl.textContent = "Pausiert — tippen zum Fortsetzen";
+    stopTimer();
+  }
+  function resumeTimer(){
+    state.startedAt = Date.now();
+    state.running = true;
+    dialEl.classList.remove("paused");
+    dialHintEl.textContent = "Tippen zum Stoppen";
+    tick();
+  }
+  function stopTimer(){
+    if (state.rafId) cancelAnimationFrame(state.rafId);
+    state.rafId = null;
+  }
+
+  function currentElapsedMs(){
+    var extra = state.running ? (Date.now() - state.startedAt) : 0;
+    return state.accumulatedMs + extra;
+  }
+
+  function fmtTime(ms){
+    var totalSec = Math.floor(ms / 1000);
+    var h = Math.floor(totalSec / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    var pad = function(n){ return (n < 10 ? "0" : "") + n; };
+    return h > 0 ? (pad(h) + ":" + pad(m) + ":" + pad(s)) : (pad(m) + ":" + pad(s));
+  }
+
+  function fmtCost(v){
+    return "€" + v.toLocaleString("de-DE", {minimumFractionDigits:0, maximumFractionDigits:0});
+  }
+
+  function fmtCostPrecise(v){
+    return "€" + v.toLocaleString("de-DE", {minimumFractionDigits:2, maximumFractionDigits:2});
+  }
+
+  function render(){
+    var elapsedMs = currentElapsedMs();
+    var group = GROUPS.find(function(g){ return g.id === state.group; });
+    var hours = elapsedMs / 3600000;
+    var cost = group.rate * state.people * hours;
+    var durationMs = state.durationMin * 60000;
+    var progress = Math.min(elapsedMs / durationMs, 1);
+    var over = elapsedMs > durationMs;
+
+    costEl.textContent = fmtCost(cost);
+    timeEl.textContent = fmtTime(elapsedMs);
+    perMinEl.textContent = "≈ " + fmtCostPrecise(group.rate * state.people / 60) + " / Min";
+    ringEl.style.strokeDashoffset = (CIRC * (1 - progress)).toFixed(2);
+    ringEl.classList.toggle("over", over);
+    progressLabelEl.classList.toggle("over", over);
+
+    if (over){
+      progressLabelEl.textContent = "Überzogen um " + fmtTime(elapsedMs - durationMs);
+      if (state.running) triggerOvertimeAlert();
+    } else {
+      progressLabelEl.textContent = Math.round(progress * 100) + " % des Meetings";
+    }
+  }
+
+  function tick(){
+    render();
+    if (state.running){
+      state.rafId = requestAnimationFrame(tick);
+    }
+  }
+
+  render();
+  updatePreview();
+})();
+</script>
+
+</body>
+</html>
